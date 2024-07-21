@@ -62,6 +62,14 @@ class PeripheralManager: NSObject {
         peripheral.delegate = self
     }
     
+    deinit {
+        self.writeTimeoutTask?.cancel()
+        
+        for (opCode, continuation) in writeQueue {
+            continuation.resume(throwing: NSError(domain: "PeripheralManager deinit hit... Most likely an encryption issue - opCode: \(opCode)", code: 0, userInfo: nil))
+        }
+    }
+    
     func writeMessage(_ packet: DanaGeneratePacket) async throws -> (any DanaParsePacketProtocol)  {
         return try await withCheckedThrowingContinuation { continuation in
             self.writeQueue[packet.opCode] = continuation
@@ -117,7 +125,7 @@ class PeripheralManager: NSObject {
                 // We hit a timeout
                 // This means the pump received the message but could decrypt it
                 // We need to reconnect in order to fix the encryption keys
-                self.pumpManager.disconnect(self.connectedDevice, true)
+                self.bluetoothManager.manager.cancelPeripheralConnection(self.connectedDevice)
                 queueItem.resume(throwing: NSError(domain: "Message write timeout. Most likely an encryption issue - opCode: \(packet.opCode)", code: 0, userInfo: nil))
                 
                 self.communicationGroup.leave()
