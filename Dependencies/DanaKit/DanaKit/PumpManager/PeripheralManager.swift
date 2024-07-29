@@ -65,7 +65,7 @@ class PeripheralManager: NSObject {
     deinit {
         self.writeTimeoutTask?.cancel()
         
-        for (opCode, continuation) in writeQueue {
+        for (opCode, continuation) in self.writeQueue {
             continuation.resume(throwing: NSError(domain: "PeripheralManager deinit hit... Most likely an encryption issue - opCode: \(opCode)", code: 0, userInfo: nil))
         }
     }
@@ -78,10 +78,7 @@ class PeripheralManager: NSObject {
     }
     
     private func write(_ packet: DanaGeneratePacket) {
-        if self.writeTimeoutTask != nil {
-            self.communicationGroup.wait()
-        }
-        
+        self.communicationGroup.wait()
         self.communicationGroup.enter()
         
         let command = (UInt16((packet.type ?? DanaPacketType.TYPE_RESPONSE)) << 8) + UInt16(packet.opCode)
