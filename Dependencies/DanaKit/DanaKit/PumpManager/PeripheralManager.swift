@@ -35,10 +35,9 @@ class PeripheralManager: NSObject {
     private let WRITE_CHAR_UUID = CBUUID(string: "FFF2")
     private var writeCharacteristic: CBCharacteristic!
     
-    private var lock: DispatchQueue = DispatchQueue.init(label: "writeQueue")
     private var writeQueue: Dictionary<UInt8, CheckedContinuation<(any DanaParsePacketProtocol), Error>> = [:]
     private var writeTimeoutTask: Task<(), Never>?
-    private let communicationGroup = DispatchGroup()
+    private let writeSemaphore = DispatchSemaphore(value: 1)
     
     private var historyLog: [HistoryItem] = []
     
@@ -75,8 +74,7 @@ class PeripheralManager: NSObject {
     }
     
     private func write(_ packet: DanaGeneratePacket) {
-        self.communicationGroup.wait()
-        self.communicationGroup.enter()
+        self.writeSemaphore.wait()
         
         let command = (UInt16((packet.type ?? DanaPacketType.TYPE_RESPONSE)) << 8) + UInt16(packet.opCode)
         
@@ -122,9 +120,9 @@ class PeripheralManager: NSObject {
                 self.bluetoothManager.manager.cancelPeripheralConnection(self.connectedDevice)
                 queueItem.resume(throwing: NSError(domain: "Message write timeout. Most likely an encryption issue - opCode: \(packet.opCode)", code: 0, userInfo: nil))
                 
-                self.communicationGroup.leave()
                 self.writeQueue[packet.opCode] = nil
                 self.writeTimeoutTask = nil
+                self.writeSemaphore.signal()
             } catch {
                 // Task was cancelled because message has been received
             }
@@ -132,7 +130,7 @@ class PeripheralManager: NSObject {
     }
     
     private func connectionFailure(_ error: any Error) {
-        self.bluetoothManager.disconnect(self.connectedDevice, force: true)
+        self.bluetoothManager.manager.cancelPeripheralConnection(self.connectedDevice)
         
         guard let completion = self.completion else {
             return
@@ -381,7 +379,7 @@ extension PeripheralManager {
             guard ble5Keys.filter({ $0 == 0 }).count == 0 else {
                 log.error("Invalid BLE-5 keys. Please unbound device and try again.")
                 
-                self.pumpManager.disconnect(self.connectedDevice)
+                self.bluetoothManager.manager.cancelPeripheralConnection(self.connectedDevice)
                 guard let completion = self.completion else {
                     return
                 }
@@ -496,7 +494,7 @@ extension PeripheralManager {
             } else {
                 log.error("Received invalid packets. Starting bytes do not exists in message. Encryption mode possibly wrong Data: \(self.readBuffer.base64EncodedString())")
                 self.readBuffer = Data([])
-                self.bluetoothManager.disconnect(self.connectedDevice, force: true)
+                self.bluetoothManager.manager.cancelPeripheralConnection(self.connectedDevice)
                 return
             }
         }
@@ -604,7 +602,7 @@ extension PeripheralManager {
         // Message received and dequeueing timeout
         guard let opCode = message.opCode, let continuation = self.writeQueue[opCode] else {
             log.error("No continuation token found to send this message back...")
-            self.communicationGroup.leave()
+            self.writeSemaphore.signal()
             return
         }
         
@@ -612,11 +610,11 @@ extension PeripheralManager {
             if data.code == HistoryCode.RECORD_TYPE_DONE_UPLOAD {
                 continuation.resume(returning: DanaParsePacket<[HistoryItem]>(success: true, rawData: Data([]), data: self.historyLog.map({ $0 })))
                 
-                self.communicationGroup.leave()
                 self.writeQueue[opCode] = nil
                 self.writeTimeoutTask?.cancel()
                 self.writeTimeoutTask = nil
                 self.historyLog = []
+                self.writeSemaphore.signal()
             } else {
                 self.historyLog.append(data)
             }
@@ -629,7 +627,7 @@ extension PeripheralManager {
         self.writeQueue[opCode] = nil
         self.writeTimeoutTask?.cancel()
         self.writeTimeoutTask = nil
-        self.communicationGroup.leave()
+        self.writeSemaphore.signal()
     }
     
     private func isHistoryPacket(opCode: UInt16) -> Bool {
