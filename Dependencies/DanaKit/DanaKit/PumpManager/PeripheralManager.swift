@@ -70,10 +70,7 @@ class PeripheralManager: NSObject {
     func writeMessage(_ packet: DanaGeneratePacket) async throws -> (any DanaParsePacketProtocol)  {
         return try await withCheckedThrowingContinuation { continuation in
             self.writeQueue[packet.opCode] = continuation
-            
-            DispatchQueue.main.async(group: self.communicationGroup) {
-                self.write(packet)
-            }
+            self.write(packet)
         }
     }
     
