@@ -70,15 +70,16 @@ class PeripheralManager: NSObject {
     func writeMessage(_ packet: DanaGeneratePacket) async throws -> (any DanaParsePacketProtocol)  {
         return try await withCheckedThrowingContinuation { continuation in
             self.writeQueue[packet.opCode] = continuation
-            self.write(packet)
+            
+            DispatchQueue.main.async(group: self.communicationGroup) {
+                self.write(packet)
+            }
         }
     }
     
     private func write(_ packet: DanaGeneratePacket) {
         self.communicationGroup.wait()
         self.communicationGroup.enter()
-        
-        let command = (UInt16((packet.type ?? DanaPacketType.TYPE_RESPONSE)) << 8) + UInt16(packet.opCode)
         
         let command = (UInt16((packet.type ?? DanaPacketType.TYPE_RESPONSE)) << 8) + UInt16(packet.opCode)
         
@@ -95,7 +96,7 @@ class PeripheralManager: NSObject {
         
         if (DanaRSEncryption.enhancedEncryption != EncryptionType.DEFAULT.rawValue) {
             data = DanaRSEncryption.encodeSecondLevel(data: data)
-            self.log.info("Second level encrypted data: \(data.base64EncodedString())")
+//            self.log.info("Second level encrypted data: \(data.base64EncodedString())")
         }
         
         // Now schedule a 6 sec timeout (or 21 when in fetchHistoryMode) for the pump to send its message back
@@ -475,14 +476,14 @@ extension PeripheralManager {
     private func parseReceivedValue(_ receievedData: Data) {
         var data = receievedData
         if (self.pumpManager.state.isConnected && DanaRSEncryption.enhancedEncryption != EncryptionType.DEFAULT.rawValue) {
-            self.log.info("Second lvl decryption")
+//            self.log.info("Second lvl decryption")
             data = DanaRSEncryption.decodeSecondLevel(data: data)
         }
         
         self.readBuffer.append(data)
         guard self.readBuffer.count >= 6 else {
             // Buffer is not ready to be processed
-            self.log.warning("Buffer not ready yet: \(self.readBuffer.base64EncodedString())")
+//            self.log.warning("Buffer not ready yet: \(self.readBuffer.base64EncodedString())")
             return
         }
         
@@ -506,7 +507,7 @@ extension PeripheralManager {
         let length = Int(self.readBuffer[2])
         guard (length + 7 == self.readBuffer.count) else {
             // Not all packets have been received yet...
-            self.log.warning("ot all packets have been received yet - Should be: \(length + 7), currently: \(self.readBuffer.count)")
+//            self.log.warning("Not all packets have been received yet - Should be: \(length + 7), currently: \(self.readBuffer.count)")
             return
         }
         
