@@ -40,3 +40,6 @@
 	path = MedtrumKit
 	url = https://github.com/Artificial-Pancreas/MedtrumKit.git
 	branch = dev
+[submodule "AccuChekKit"]
+	path = AccuChekKit
+	url = https://github.com/bastiaanv/AccuChekCGM

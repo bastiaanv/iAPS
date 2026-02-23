@@ -1,3 +1,4 @@
+import AccuChekKit
 import CGMBLEKit
 import Foundation
 import G7SensorKit
@@ -30,6 +31,7 @@ enum KnownPlugins {
         return switch cgmManager.pluginIdentifier {
         case G6CGMManager.pluginIdentifier: 10 * secondsOfDay
         case G7CGMManager.pluginIdentifier: 10.5 * secondsOfDay
+        case AccuChekCgmManager.pluginIdentifier: 14 * secondsOfDay
         case LibreTransmitterManagerV3.pluginIdentifier: libreExpirationSeconds
         case MinimedPumpManager.pluginIdentifier: 6 * secondsOfDay
         default: nil
@@ -51,6 +53,8 @@ enum KnownPlugins {
             return (cgmManager as? G6CGMManager)?.latestReading?.sessionStartDate
         case G7CGMManager.pluginIdentifier:
             return (cgmManager as? G7CGMManager)?.sensorFinishesWarmupAt
+        case AccuChekCgmManager.pluginIdentifier:
+            return (cgmManager as? AccuChekCgmManager)?.rawState["cgmStartTime"] as? Date
         case LibreTransmitterManagerV3.pluginIdentifier:
             return (cgmManager as? LibreTransmitterManagerV3)?.sensorInfoObservable.activatedAt
         default:
@@ -77,6 +81,7 @@ enum KnownPlugins {
         case G5CGMManager.pluginIdentifier: return CGMType.dexcomG5.rawValue
         case G6CGMManager.pluginIdentifier: return CGMType.dexcomG6.rawValue
         case G7CGMManager.pluginIdentifier: return CGMType.dexcomG7.rawValue
+        case AccuChekCgmManager.pluginIdentifier: return CGMType.accuchek.rawValue
         case LibreTransmitterManagerV3.pluginIdentifier: return CGMType.libreTransmitter.rawValue
         case NightscoutRemoteCGM.pluginIdentifier: return CGMType.nightscout.rawValue
         case MockCGMManager.pluginIdentifier: return CGMType.simulator.rawValue
